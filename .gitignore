@@ -1,0 +1,13 @@
+#Oculto entorno virtual
+venv/
+#Oculto base de datos
+db.sqlite3
+
+__pycache__/
+*.pyc
+
+.env
+
+/media/
+
+/static/
