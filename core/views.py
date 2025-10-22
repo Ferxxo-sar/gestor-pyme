@@ -21,7 +21,7 @@ def nueva_venta(request):
         total_venta = 0
         productos_vendidos = 0
 
-        # recorro el queryset(IMPORTANTE-> Lazy Evaluation) instanciado en el get anterior
+        # recorro el queryset(IMPORTANTE -> Lazy Evaluation) instanciado en el get anterior
         # el queryset no instancia la lista, simplemente guarda la consulta y no la realiza hasta necesitarla
         for producto in productos:
             cantidad_str = request.POST.get(f'cantidad_{producto.id}')
@@ -69,4 +69,4 @@ def nueva_venta(request):
         'productos': productos,
         'vendedor': vendedor_por_defecto,
     }
-    return render(request, 'core/nueva_venta.html', context)
+    return render(request, 'gestor_pyme/nueva_venta.html', context)
