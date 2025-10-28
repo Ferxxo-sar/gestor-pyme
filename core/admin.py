@@ -1,11 +1,12 @@
 from django.contrib import admin
 
-# importo todos los modelos
-from .models import Categoria, Proveedor, Producto, Venta, DetalleVenta
+# Los modelos han sido movidos a sus respectivas aplicaciones:
+# - Venta y DetalleVenta -> ventas/models.py
+# - Producto y Categoria -> productos/models.py
+# - Proveedor -> proveedores/models.py
+from django.contrib import admin
 
-# otorgo permisos de administrador
-admin.site.register(Categoria)
-admin.site.register(Proveedor)
-admin.site.register(Producto)
-admin.site.register(Venta)
-admin.site.register(DetalleVenta)
+# Los modelos han sido movidos a sus respectivas aplicaciones:
+# - Venta y DetalleVenta -> ventas/models.py
+# - Producto y Categoria -> productos/models.py
+# - Proveedor -> proveedores/models.py

@@ -1,8 +1,8 @@
 from django.urls import path
-from . import views # Importa el archivo views.py de esta misma app
+from . import views
 
-# Django busca esta lista específica para las URLs de la app.
+app_name = 'core'
+
 urlpatterns = [
-    # Define que la ruta raíz ('') será manejada por la vista 'nueva_venta'.
-    path('', views.nueva_venta, name='nueva_venta'),
+    path('', views.index, name='index'),
 ]
