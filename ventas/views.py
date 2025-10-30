@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.contrib.auth.models import User
+from django.http import JsonResponse
 from .models import Venta, DetalleVenta
 from productos.models import Producto
 
@@ -57,3 +58,24 @@ def nueva_venta(request):
         'vendedor': vendedor_por_defecto,
     }
     return render(request, 'ventas/nueva_venta.html', context)
+
+
+def search_products(request):
+    """AJAX endpoint: return products matching q as JSON."""
+    q = request.GET.get('q', '').strip()
+    if not q:
+        return JsonResponse({'results': []})
+
+    productos_qs = Producto.objects.filter(nombre__icontains=q)[:60]
+    results = []
+    for p in productos_qs:
+        results.append({
+            'id': p.id,
+            'nombre': p.nombre,
+            'precio_venta': float(p.precio_venta),
+            'stock': p.stock,
+            'categoria': str(p.categoria) if p.categoria else None,
+            'stock_minimo': getattr(p, 'stock_minimo', 0),
+        })
+
+    return JsonResponse({'results': results})
