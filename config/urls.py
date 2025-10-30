@@ -4,6 +4,7 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('ventas/', include('ventas.urls')),
+    path('proveedores/', include('proveedores.urls')),
     # si no es admin va a buscar al core 
     path('', include('core.urls')),
 ]
