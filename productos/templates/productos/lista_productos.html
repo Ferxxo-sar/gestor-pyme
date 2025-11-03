@@ -4,7 +4,12 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4">Lista de Productos</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Lista de Productos</h2>
+        <a href="{% url 'productos:nuevo_producto' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-2"></i>Nuevo Producto
+        </a>
+    </div>
     <div class="table-responsive">
         <table class="table table-hover">
             <thead>
@@ -24,8 +29,14 @@
                     <td>${{ producto.precio }}</td>
                     <td>{{ producto.stock }}</td>
                     <td>
-                        <button class="btn btn-sm btn-primary">Editar</button>
-                        <button class="btn btn-sm btn-danger">Eliminar</button>
+                        <a href="{% url 'productos:editar_producto' producto.id %}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-pencil me-1"></i>Editar
+                        </a>
+                        <button class="btn btn-sm btn-danger" 
+                                onclick="confirmarEliminar('{{ producto.id }}', '{{ producto.nombre }}')"
+                                {% if producto.stock > 0 %}disabled title="No se puede eliminar un producto con stock"{% endif %}>
+                            <i class="bi bi-trash me-1"></i>Eliminar
+                        </button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -33,4 +44,41 @@
         </table>
     </div>
 </div>
+
+<!-- Modal de Confirmación de Eliminación -->
+<div class="modal fade" id="eliminarModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Eliminación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>¿Estás seguro que deseas eliminar el producto <strong id="productoNombre"></strong>?</p>
+                <p class="text-danger">Esta acción no se puede deshacer.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form id="formEliminar" method="POST" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Eliminar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function confirmarEliminar(productoId, nombreProducto) {
+        // Actualizar el modal con los datos del producto
+        document.getElementById('productoNombre').textContent = nombreProducto;
+        document.getElementById('formEliminar').action = `/productos/${productoId}/eliminar/`;
+        
+        // Mostrar el modal
+        var modal = new bootstrap.Modal(document.getElementById('eliminarModal'));
+        modal.show();
+    }
+</script>
 {% endblock %}
