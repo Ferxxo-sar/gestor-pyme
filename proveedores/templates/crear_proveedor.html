@@ -32,10 +32,129 @@
                             <input type="tel" class="form-control" id="telefono" name="telefono">
                         </div>
 
-                        <div class="mb-3">
-                            <label for="direccion" class="form-label">Dirección</label>
-                            <input type="text" class="form-control" id="direccion" name="direccion">
+                        <!-- Campos de Dirección -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Dirección</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-8 mb-3">
+                                        <label for="calle" class="form-label">Calle *</label>
+                                        <input type="text" class="form-control" id="calle" name="calle">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="numero" class="form-label">Número *</label>
+                                        <input type="text" class="form-control" id="numero" name="numero">
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="ciudad" class="form-label">Ciudad *</label>
+                                        <select class="form-select" id="ciudad" name="ciudad">
+                                            <option value="">-- Seleccionar --</option>
+                                            {% for ciudad in ciudades %}
+                                                <option value="{{ ciudad.id }}" {% if ciudad.estado %}data-estado="{{ ciudad.estado.id }}"{% endif %}>{{ ciudad.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="estado" class="form-label">Estado/Provincia</label>
+                                        <select class="form-select" id="estado" name="estado">
+                                            <option value="">-- Seleccionar --</option>
+                                            {% for estado in estados %}
+                                                <option value="{{ estado.id }}" {% if estado.pais %}data-pais="{{ estado.pais.id }}"{% endif %}>{{ estado.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="codigo_postal" class="form-label">Código Postal</label>
+                                        <select class="form-select" id="codigo_postal" name="codigo_postal">
+                                            <option value="">-- Seleccionar --</option>
+                                            {% for cp in codigos_postales %}
+                                                <option value="{{ cp.id }}">{{ cp.codigo }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="pais" class="form-label">País</label>
+                                        <select class="form-select" id="pais" name="pais">
+                                            <option value="">-- Seleccionar --</option>
+                                            {% for pais in paises %}
+                                                <option value="{{ pais.id }}">{{ pais.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
+                        <script>
+                            (function(){
+                                const paisSelect = document.getElementById('pais');
+                                const estadoSelect = document.getElementById('estado');
+                                const ciudadSelect = document.getElementById('ciudad');
+
+                                function clearSelect(sel){
+                                    sel.innerHTML = '<option value="">-- Seleccionar --</option>';
+                                }
+
+                                function populateSelect(sel, items, selectedId){
+                                    clearSelect(sel);
+                                    items.forEach(it => {
+                                        const opt = document.createElement('option');
+                                        opt.value = it.id;
+                                        opt.textContent = it.nombre || it.codigo || it.nombre;
+                                        if(String(it.id) === String(selectedId)) opt.selected = true;
+                                        sel.appendChild(opt);
+                                    });
+                                }
+
+                                async function loadEstados(paisId, selectedEstado){
+                                    clearSelect(estadoSelect);
+                                    clearSelect(ciudadSelect);
+                                    if(!paisId) return;
+                                    const res = await fetch(`/proveedores/ajax/estados/${paisId}/`);
+                                    if(!res.ok) return;
+                                    const data = await res.json();
+                                    populateSelect(estadoSelect, data.estados, selectedEstado);
+                                }
+
+                                async function loadCiudades(estadoId, selectedCiudad){
+                                    clearSelect(ciudadSelect);
+                                    if(!estadoId) return;
+                                    const res = await fetch(`/proveedores/ajax/ciudades/${estadoId}/`);
+                                    if(!res.ok) return;
+                                    const data = await res.json();
+                                    populateSelect(ciudadSelect, data.ciudades, selectedCiudad);
+                                }
+
+                                if(paisSelect){
+                                    paisSelect.addEventListener('change', function(){
+                                        const paisId = this.value;
+                                        loadEstados(paisId, null);
+                                    });
+                                }
+
+                                if(estadoSelect){
+                                    estadoSelect.addEventListener('change', function(){
+                                        const estadoId = this.value;
+                                        loadCiudades(estadoId, null);
+                                    });
+                                }
+
+                                // on load: no preselection for create, but if a pais is preselected (e.g. via browser autofill), load estados
+                                document.addEventListener('DOMContentLoaded', function(){
+                                    const selPais = paisSelect ? paisSelect.value : '';
+                                    if(selPais) loadEstados(selPais, null);
+                                });
+                            })();
+                        </script>
 
                         <div class="mb-3">
                             <label for="tipo" class="form-label">Tipo de proveedor</label>

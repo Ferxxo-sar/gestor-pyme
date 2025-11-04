@@ -37,7 +37,17 @@
                             <td>{{ proveedor.nombre }}</td>
                             <td>{{ proveedor.email }}</td>
                             <td>{{ proveedor.telefono }}</td>
-                            <td>{{ proveedor.direccion }}</td>
+                            <td>
+                                {% if proveedor.direccion %}
+                                    {{ proveedor.direccion.calle }} {{ proveedor.direccion.numero }},
+                                    {{ proveedor.direccion.ciudad.nombre }}
+                                    {% if proveedor.direccion.estado %}, {{ proveedor.direccion.estado.nombre }}{% endif %}
+                                    {% if proveedor.direccion.codigo_postal %} ({{ proveedor.direccion.codigo_postal.codigo }}){% endif %}
+                                    {% if proveedor.direccion.pais %}, {{ proveedor.direccion.pais.nombre }}{% endif %}
+                                {% else %}
+                                    <span class="text-muted">Sin dirección</span>
+                                {% endif %}
+                            </td>
                             <td>{% if proveedor.tipo %}{{ proveedor.tipo.nombre }}{% endif %}</td>
                             <td>{{ proveedor.fecha_creacion|date:"Y-m-d H:i" }}</td>
                             <td>
