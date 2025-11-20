@@ -13,7 +13,7 @@
     <div class="table-responsive">
         <table class="table table-hover">
             <thead>
-                <tr>
+                <tr data-product-id="{{ producto.id }}">
                     <th>Código</th>
                     <th>Nombre</th>
                     <th>Precio</th>
@@ -24,7 +24,7 @@
             <tbody>
                 {% for producto in productos %}
                 <tr>
-                    <td>{{ producto.codigo }}</td>
+                    <td>{{ producto.id }}</td>
                     <td>{{ producto.nombre }}</td>
                     <td>${{ producto.precio }}</td>
                     <td>{{ producto.stock }}</td>
@@ -38,6 +38,10 @@
                             <i class="bi bi-trash me-1"></i>Eliminar
                         </button>
                     </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center">No hay productos registrados.</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -74,11 +78,52 @@
     function confirmarEliminar(productoId, nombreProducto) {
         // Actualizar el modal con los datos del producto
         document.getElementById('productoNombre').textContent = nombreProducto;
-        document.getElementById('formEliminar').action = `/productos/${productoId}/eliminar/`;
-        
+        const form = document.getElementById('formEliminar');
+        form.action = `/productos/${productoId}/eliminar/`;
+        form.dataset.productId = productoId;
+
         // Mostrar el modal
         var modal = new bootstrap.Modal(document.getElementById('eliminarModal'));
         modal.show();
     }
+
+    document.addEventListener('DOMContentLoaded', function(){
+        const form = document.getElementById('formEliminar');
+        form.addEventListener('submit', function(e){
+            e.preventDefault();
+            const action = form.action;
+            const productoId = form.dataset.productId;
+            const tokenInput = form.querySelector('input[name="csrfmiddlewaretoken"]');
+            const csrf = tokenInput ? tokenInput.value : '';
+
+            // Use Fetch to POST and expect JSON response
+            fetch(action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrf,
+                    'Accept': 'application/json'
+                },
+                body: new URLSearchParams({'csrfmiddlewaretoken': csrf})
+            }).then(resp => {
+                if (!resp.ok) return resp.json().then(j=>{ throw j; });
+                return resp.json();
+            }).then(data => {
+                // success: remove row from table and hide modal
+                const row = document.querySelector(`tr[data-product-id="${productoId}"]`);
+                if (row) row.remove();
+                var modalEl = document.getElementById('eliminarModal');
+                var bsModal = bootstrap.Modal.getInstance(modalEl);
+                if (bsModal) bsModal.hide();
+                // show a quick alert
+                alert(data.message || 'Producto eliminado');
+            }).catch(err => {
+                console.error('Delete error', err);
+                // Show error message
+                const msg = (err && err.message) ? err.message : (err && err["message"]) ? err["message"] : 'Error al eliminar';
+                alert(msg);
+            });
+        });
+    });
 </script>
 {% endblock %}

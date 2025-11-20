@@ -1,4 +1,5 @@
 {% extends 'base/base.html' %}
+{% load static %}
 
 {% block title %}Terminal de Ventas{% endblock %}
 
@@ -410,6 +411,166 @@ function prepareAndSubmit() {
     form.submit();
 }
 </script>
+
+<!-- html5-qrcode and scanner integration -->
+<script src="{% static 'vendor/html5-qrcode.min.js' %}"></script>
+<script>
+// Scanner integration: start/stop tied to Bootstrap modal events
+(function(){
+    let html5Qr = null;
+
+    function onScanSuccess(decoded){
+        console.log('Scanner decoded:', decoded);
+        const input = document.querySelector('input[name="busqueda"]');
+        if (input) input.value = decoded;
+        try{ const m = bootstrap.Modal.getInstance(document.getElementById('scannerModal')); if (m) m.hide(); }catch(e){ console.warn(e); }
+    }
+
+    function onScanFailure(err){
+        // optionally log scan failures (continuous stream may produce many)
+        // console.debug('scan failure', err);
+    }
+
+    function startScanner(){
+        if (typeof Html5Qrcode === 'undefined'){
+            console.error('html5-qrcode not loaded');
+            return;
+        }
+        if (html5Qr){ try{ html5Qr.stop(); html5Qr.clear(); }catch(e){} html5Qr=null; }
+
+        const containerId = 'scanner-container';
+        const statusEl = document.getElementById('scanner-status');
+        if (statusEl){ statusEl.style.display = 'block'; statusEl.textContent = 'Iniciando cámara...'; }
+
+        Html5Qrcode.getCameras().then((cameras)=>{
+            console.log('startScanner: cameras', cameras);
+            if (!cameras || cameras.length === 0){
+                console.warn('No cameras found via getCameras(), using facingMode fallback');
+                // try html5-qrcode facingMode first, then native fallback
+                html5Qr = new Html5Qrcode(containerId);
+                return html5Qr.start({ facingMode: 'environment' }, { fps:15, qrbox:{ width:280, height:180 } }, onScanSuccess, onScanFailure)
+                  .catch(err=>{
+                      console.error('html5-qrcode facingMode start failed', err);
+                      if (statusEl) statusEl.textContent = 'No se pudo iniciar html5-qrcode, probando método nativo...';
+                      return tryNativeStream(containerId, statusEl);
+                  });
+            }
+
+            // prefer rear/back camera when possible
+            let chosen = cameras[0];
+            const preferred = cameras.find(c => /back|rear|environment/i.test(c.label || ''));
+            if (preferred) chosen = preferred;
+            const cameraId = chosen.id || chosen.deviceId || null;
+            console.log('startScanner: chosen camera', cameraId, chosen);
+
+            html5Qr = new Html5Qrcode(containerId);
+            const cameraArg = cameraId ? cameraId : { facingMode: 'environment' };
+            return html5Qr.start(cameraArg, { fps:15, qrbox:{ width:280, height:180 } }, onScanSuccess, onScanFailure)
+              .catch(err=>{
+                  console.error('html5-qrcode start with cameraArg failed', err);
+                  if (statusEl) statusEl.textContent = 'Error al iniciar html5-qrcode, intentando fallback nativo...';
+                  return tryNativeStream(containerId, statusEl);
+              });
+        }).catch((err)=>{
+            console.warn('startScanner: getCameras error, trying facingMode fallback', err);
+            console.error('getCameras error detail:', err);
+            // show error details and enumerate devices to help diagnose
+            showErrorAndDevices(err, statusEl);
+            try{
+                html5Qr = new Html5Qrcode(containerId);
+                html5Qr.start({ facingMode: 'environment' }, { fps:15, qrbox:{ width:280, height:180 } }, onScanSuccess, onScanFailure)
+                .catch(e=>{
+                    console.error('Scanner start fallback failed', e);
+                    showErrorAndDevices(e, statusEl);
+                    if (statusEl) statusEl.textContent = 'No se pudo iniciar html5-qrcode, probando método nativo...';
+                    return tryNativeStream(containerId, statusEl);
+                });
+            }catch(e){ console.error('startScanner fatal error', e); showErrorAndDevices(e, statusEl); }
+        });
+    }
+
+    // Native getUserMedia fallback: attach a plain video stream to the container
+    function tryNativeStream(containerId, statusEl){
+        const container = document.getElementById(containerId);
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+            console.error('getUserMedia not supported');
+            if (statusEl) statusEl.textContent = 'Su navegador no soporta getUserMedia.';
+            return Promise.reject(new Error('getUserMedia not supported'));
+        }
+
+        // stop any previous html5Qr
+        if (html5Qr){ try{ html5Qr.stop(); html5Qr.clear(); }catch(e){} html5Qr = null; }
+
+        // clear container and add video element
+        if (container){ container.innerHTML = ''; }
+        const video = document.createElement('video');
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;
+        if (container) container.appendChild(video);
+
+        const constraints = { video: { facingMode: 'environment' } };
+        if (statusEl) statusEl.textContent = 'Solicitando permiso de cámara...';
+
+        return navigator.mediaDevices.getUserMedia(constraints).then((stream)=>{
+            try{ video.srcObject = stream; }catch(e){ video.src = URL.createObjectURL(stream); }
+            if (statusEl) { statusEl.textContent = 'Transmisión nativa activa (modo debug).'; setTimeout(()=>{ statusEl.style.display='none'; }, 3000); }
+            console.log('Native stream started', stream);
+            return Promise.resolve(stream);
+        }).catch((err)=>{
+            console.error('Native getUserMedia failed', err);
+            if (statusEl){
+                if (err.name === 'NotAllowedError' || err.name === 'SecurityError') statusEl.textContent = 'Permiso de cámara denegado.';
+                else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') statusEl.textContent = 'Cámara no encontrada o no disponible.';
+                else statusEl.textContent = 'Error al acceder a la cámara: ' + (err.message || err.name);
+                statusEl.style.display = 'block';
+                // enumerate devices to provide additional clues
+                enumerateDevicesToElement();
+            }
+            return Promise.reject(err);
+        });
+    }
+
+    function enumerateDevicesToElement(){
+        const el = document.getElementById('scanner-devices');
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        navigator.mediaDevices.enumerateDevices().then(devices=>{
+            const videoDevices = devices.filter(d=>d.kind === 'videoinput');
+            const lines = [];
+            lines.push('Dispositivos de entrada de video encontrados: ' + videoDevices.length);
+            videoDevices.forEach((d, i)=>{
+                lines.push(`${i+1}. label: "${d.label}" id: "${d.deviceId}"`);
+            });
+            if (el){ el.style.display = 'block'; el.textContent = lines.join('\n'); }
+            console.log('enumerateDevices result:', devices);
+        }).catch(e=>{ console.warn('enumerateDevices failed', e); });
+    }
+
+    function showErrorAndDevices(err, statusEl){
+        console.error('Scanner error:', err);
+        if (statusEl){ statusEl.style.display='block'; statusEl.textContent = 'Error: ' + ((err && (err.message || err.name)) || String(err)); }
+        enumerateDevicesToElement();
+    }
+
+    function stopScanner(){
+        if (!html5Qr) return;
+        html5Qr.stop().then(()=>{
+            try{ html5Qr.clear(); }catch(e){}
+            html5Qr = null;
+        }).catch((err)=>{ console.warn('stopScanner error', err); html5Qr = null; });
+    }
+
+    document.addEventListener('DOMContentLoaded', function(){
+        const scannerModalEl = document.getElementById('scannerModal');
+        if (scannerModalEl){
+            scannerModalEl.addEventListener('shown.bs.modal', startScanner);
+            scannerModalEl.addEventListener('hidden.bs.modal', stopScanner);
+        }
+    });
+})();
+</script>
 {% endblock %}
 
 {% block content %}
@@ -431,6 +592,10 @@ function prepareAndSubmit() {
                     <button class="btn btn-primary" type="submit">
                         <i class="bi bi-search"></i>
                         <span class="shortcut-key">F3</span>
+                    </button>
+                    <!-- Scanner button next to search (standardized) -->
+                    <button class="btn btn-outline-secondary btn-sm ms-1" id="scannerButton" type="button" title="Escanear" data-bs-toggle="modal" data-bs-target="#scannerModal" aria-label="Escanear">
+                        <i class="bi bi-upc-scan"></i>
                     </button>
                 </div>
             </form>
@@ -533,7 +698,26 @@ function prepareAndSubmit() {
     </div>
 
     </div>
-
+                <!-- Scanner Modal (moved from global template) -->
+                <div class="modal fade" id="scannerModal" tabindex="-1" aria-labelledby="scannerModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h6 class="modal-title" id="scannerModalLabel">Escanear código</h6>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <div id="scanner-container" style="width:100%;height:320px;background:#000;position:relative;overflow:hidden;"></div>
+                                <p id="scanner-help" class="small text-muted mt-2">Aproxime el código al área de la cámara.</p>
+                                <p id="scanner-status" class="small text-warning mt-1" style="display:none"></p>
+                                <pre id="scanner-devices" class="small text-muted mt-2" style="display:none;white-space:pre-wrap;font-size:0.85rem;max-height:140px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;border:1px solid #eee"></pre>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 <!-- Modal de atajos de teclado -->
 <div class="modal fade" id="shortcutsModal" tabindex="-1">
     <div class="modal-dialog">
