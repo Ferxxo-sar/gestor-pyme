@@ -5,6 +5,39 @@ from django.http import JsonResponse
 from .models import Venta, DetalleVenta
 from productos.models import Producto
 
+def historial_ventas(request):
+    """Vista para mostrar el historial de ventas."""
+    ventas = Venta.objects.all().select_related('vendedor').prefetch_related('detalleventa_set__producto').order_by('-fecha')
+    
+    context = {
+        'ventas': ventas,
+    }
+    return render(request, 'ventas/historial_ventas.html', context)
+
+
+def anular_venta(request, venta_id):
+    """Vista para anular una venta y devolver el stock."""
+    if request.method == 'POST':
+        try:
+            venta = Venta.objects.get(id=venta_id)
+            
+            # Devolver el stock de cada producto
+            for detalle in venta.detalleventa_set.all():
+                producto = detalle.producto
+                producto.stock += detalle.cantidad
+                producto.save()
+            
+            # Eliminar la venta
+            venta.delete()
+            messages.success(request, f'Venta #{venta_id} anulada exitosamente. Stock devuelto.')
+            
+        except Venta.DoesNotExist:
+            messages.error(request, 'La venta no existe.')
+        except Exception as e:
+            messages.error(request, f'Error al anular la venta: {str(e)}')
+    
+    return redirect('ventas:historial_ventas')
+
 def nueva_venta(request):
     termino_busqueda = request.GET.get('busqueda', '')
 
