@@ -418,12 +418,101 @@ function prepareAndSubmit() {
 // Scanner integration: start/stop tied to Bootstrap modal events
 (function(){
     let html5Qr = null;
+    let isProcessing = false; // Flag para evitar procesamiento múltiple
+    let lastScannedCode = null;
+    let lastScannedTime = 0;
 
-    function onScanSuccess(decoded){
+    // Función para reproducir sonido de beep
+    function playBeep() {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 800; // Frecuencia del beep
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.15);
+    }
+
+    async function onScanSuccess(decoded){
         console.log('Scanner decoded:', decoded);
-        const input = document.querySelector('input[name="busqueda"]');
-        if (input) input.value = decoded;
-        try{ const m = bootstrap.Modal.getInstance(document.getElementById('scannerModal')); if (m) m.hide(); }catch(e){ console.warn(e); }
+        
+        // Evitar procesamiento duplicado del mismo código en menos de 2 segundos
+        const now = Date.now();
+        if (isProcessing || (decoded === lastScannedCode && (now - lastScannedTime) < 2000)) {
+            console.log('Ignorando escaneo duplicado');
+            return;
+        }
+        
+        isProcessing = true;
+        lastScannedCode = decoded;
+        lastScannedTime = now;
+        
+        // Buscar el producto por código con reintentos
+        const endpoint = '{% url "ventas:search_products" %}';
+        const maxRetries = 3;
+        let attempts = 0;
+        let producto = null;
+        
+        while (attempts < maxRetries && !producto) {
+            attempts++;
+            try {
+                console.log(`Intento ${attempts} de ${maxRetries} para buscar producto: ${decoded}`);
+                const res = await fetch(endpoint + '?q=' + encodeURIComponent(decoded));
+                if (!res.ok) throw new Error('network');
+                const data = await res.json();
+                const results = data.results || [];
+                
+                if (results.length > 0) {
+                    producto = results[0];
+                    break;
+                }
+                
+                // Si no encontró resultados y aún hay intentos, esperar un poco
+                if (attempts < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+                
+            } catch(err) {
+                console.error(`Error en intento ${attempts}:`, err);
+                if (attempts < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
+        }
+        
+        if (!producto) {
+            // Poner el código en el buscador para que el usuario busque manualmente
+            const input = document.querySelector('input[name="busqueda"]');
+            if (input) input.value = decoded;
+            isProcessing = false; // Liberar el flag
+            return;
+        }
+        
+        // Cerrar el modal del scanner
+        try{ 
+            const m = bootstrap.Modal.getInstance(document.getElementById('scannerModal')); 
+            if (m) m.hide(); 
+        }catch(e){ console.warn(e); }
+        
+        // Agregar al carrito
+        addToCart(producto.id, producto.nombre, parseFloat(producto.precio_venta), producto.stock);
+        
+        // Reproducir beep
+        playBeep();
+        
+        // Mostrar notificación
+        showToast('success', `${producto.nombre} agregado al carrito`);
+        
+        // Liberar el flag después de un breve delay
+        setTimeout(() => { isProcessing = false; }, 500);
     }
 
     function onScanFailure(err){

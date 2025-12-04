@@ -62,19 +62,34 @@ def nueva_venta(request):
 
 def search_products(request):
     """AJAX endpoint: return products matching q as JSON."""
+    from django.db.models import Q
+    
     q = request.GET.get('q', '').strip()
     if not q:
         return JsonResponse({'results': []})
 
-    productos_qs = Producto.objects.filter(nombre__icontains=q)[:60]
+    # Buscar por nombre (parcial) o por código (parcial)
+    query = Q(nombre__icontains=q)
+    
+    # Si el término contiene solo dígitos, también buscar por código
+    if q.isdigit():
+        query |= Q(codigo__icontains=q)
+    
+    productos_qs = Producto.objects.filter(query)[:60]
+    
     results = []
     for p in productos_qs:
+        try:
+            categoria_nombre = str(p.categoria) if hasattr(p, 'categoria') and p.categoria else None
+        except:
+            categoria_nombre = None
+            
         results.append({
             'id': p.id,
             'nombre': p.nombre,
             'precio_venta': float(p.precio_venta),
             'stock': p.stock,
-            'categoria': str(p.categoria) if p.categoria else None,
+            'categoria': categoria_nombre,
             'stock_minimo': getattr(p, 'stock_minimo', 0),
         })
 
