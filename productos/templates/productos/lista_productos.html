@@ -13,7 +13,7 @@
     <div class="table-responsive">
         <table class="table table-hover">
             <thead>
-                <tr data-product-id="{{ producto.id }}">
+                <tr>
                     <th>Código</th>
                     <th>Nombre</th>
                     <th>Precio</th>
@@ -23,18 +23,17 @@
             </thead>
             <tbody>
                 {% for producto in productos %}
-                <tr>
+                <tr data-product-id="{{ producto.id }}">
                     <td>{{ producto.id }}</td>
                     <td>{{ producto.nombre }}</td>
-                    <td>${{ producto.precio }}</td>
+                    <td>${{ producto.precio_venta }}</td>
                     <td>{{ producto.stock }}</td>
                     <td>
                         <a href="{% url 'productos:editar_producto' producto.id %}" class="btn btn-sm btn-primary">
                             <i class="bi bi-pencil me-1"></i>Editar
                         </a>
                         <button class="btn btn-sm btn-danger" 
-                                onclick="confirmarEliminar('{{ producto.id }}', '{{ producto.nombre }}')"
-                                {% if producto.stock > 0 %}disabled title="No se puede eliminar un producto con stock"{% endif %}>
+                            onclick="confirmarEliminar('{{ producto.id }}', '{{ producto.nombre }}')">
                             <i class="bi bi-trash me-1"></i>Eliminar
                         </button>
                     </td>

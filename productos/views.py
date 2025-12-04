@@ -11,17 +11,11 @@ def eliminar_producto(request, producto_id):
     producto = get_object_or_404(Producto, id=producto_id)
     
     if request.method == 'POST':
-        if producto.stock > 0:
-            messages.error(request, 'No se puede eliminar un producto que tiene stock.')
-            # If AJAX request, return JSON with error
-            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                return JsonResponse({'status': 'error', 'message': 'No se puede eliminar un producto que tiene stock.'}, status=400)
-        else:
-            nombre_producto = producto.nombre
-            producto.delete()
-            messages.success(request, f'El producto {nombre_producto} ha sido eliminado.')
-            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                return JsonResponse({'status': 'ok', 'message': f'El producto {nombre_producto} ha sido eliminado.'})
+        nombre_producto = producto.nombre
+        producto.delete()
+        messages.success(request, f'El producto {nombre_producto} ha sido eliminado.')
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'status': 'ok', 'message': f'El producto {nombre_producto} ha sido eliminado.'})
         return redirect('productos:lista_productos')
     
     return redirect('productos:lista_productos')
@@ -33,7 +27,7 @@ def editar_producto(request, producto_id):
         try:
             producto.nombre = request.POST.get('nombre')
             producto.codigo = request.POST.get('codigo')
-            producto.precio = request.POST.get('precio')
+            producto.precio_venta = request.POST.get('precio')
             producto.stock = request.POST.get('stock')
             producto.save()
             
@@ -55,7 +49,7 @@ def nuevo_producto(request):
             producto = Producto.objects.create(
                 nombre=nombre,
                 codigo=codigo,
-                precio=precio,
+                precio_venta=precio,
                 stock=stock
             )
             messages.success(request, f'Producto {producto.nombre} creado exitosamente.')
