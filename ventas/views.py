@@ -5,6 +5,39 @@ from django.http import JsonResponse
 from .models import Venta, DetalleVenta
 from productos.models import Producto
 
+def historial_ventas(request):
+    """Vista para mostrar el historial de ventas."""
+    ventas = Venta.objects.all().select_related('vendedor').prefetch_related('detalleventa_set__producto').order_by('-fecha')
+    
+    context = {
+        'ventas': ventas,
+    }
+    return render(request, 'ventas/historial_ventas.html', context)
+
+
+def anular_venta(request, venta_id):
+    """Vista para anular una venta y devolver el stock."""
+    if request.method == 'POST':
+        try:
+            venta = Venta.objects.get(id=venta_id)
+            
+            # Devolver el stock de cada producto
+            for detalle in venta.detalleventa_set.all():
+                producto = detalle.producto
+                producto.stock += detalle.cantidad
+                producto.save()
+            
+            # Eliminar la venta
+            venta.delete()
+            messages.success(request, f'Venta #{venta_id} anulada exitosamente. Stock devuelto.')
+            
+        except Venta.DoesNotExist:
+            messages.error(request, 'La venta no existe.')
+        except Exception as e:
+            messages.error(request, f'Error al anular la venta: {str(e)}')
+    
+    return redirect('ventas:historial_ventas')
+
 def nueva_venta(request):
     termino_busqueda = request.GET.get('busqueda', '')
 
@@ -62,19 +95,34 @@ def nueva_venta(request):
 
 def search_products(request):
     """AJAX endpoint: return products matching q as JSON."""
+    from django.db.models import Q
+    
     q = request.GET.get('q', '').strip()
     if not q:
         return JsonResponse({'results': []})
 
-    productos_qs = Producto.objects.filter(nombre__icontains=q)[:60]
+    # Buscar por nombre (parcial) o por código (parcial)
+    query = Q(nombre__icontains=q)
+    
+    # Si el término contiene solo dígitos, también buscar por código
+    if q.isdigit():
+        query |= Q(codigo__icontains=q)
+    
+    productos_qs = Producto.objects.filter(query)[:60]
+    
     results = []
     for p in productos_qs:
+        try:
+            categoria_nombre = str(p.categoria) if hasattr(p, 'categoria') and p.categoria else None
+        except:
+            categoria_nombre = None
+            
         results.append({
             'id': p.id,
             'nombre': p.nombre,
             'precio_venta': float(p.precio_venta),
             'stock': p.stock,
-            'categoria': str(p.categoria) if p.categoria else None,
+            'categoria': categoria_nombre,
             'stock_minimo': getattr(p, 'stock_minimo', 0),
         })
 
