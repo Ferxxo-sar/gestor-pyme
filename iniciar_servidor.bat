@@ -1,0 +1,6 @@
+@echo off
+echo Creando superusuario admin...
+.\.venv\Scripts\python.exe manage.py crear_superusuario
+echo.
+echo Iniciando servidor Django...
+.\.venv\Scripts\python.exe manage.py runserver

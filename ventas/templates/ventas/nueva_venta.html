@@ -1,170 +1,861 @@
 {% extends 'base/base.html' %}
+{% load static %}
 
-{% block title %}Nueva Venta{% endblock %}
+{% block title %}Terminal de Ventas{% endblock %}
 
-{% block content %}
-<div class="pos-container">
-    <!-- Panel de Productos -->
-    <div class="pos-products">
-        <form class="d-flex mb-3" method="GET" action="">
-            <div class="input-group">
-                <input name="busqueda" class="form-control form-control-lg" type="search" 
-                       placeholder="Buscar producto por nombre, código o descripción..." 
-                       value="{{ request.GET.busqueda|default:'' }}">
-                <button class="btn btn-primary" type="submit">
-                    <i class="bi bi-search"></i>
-                </button>
-            </div>
-        </form>
+{% block extra_css %}
+<style>
+    /* Neutral, low-contrast POS theme */
+    body {
+        background: #f7f8fa;
+        color: #1f2937; /* neutral dark gray */
+        font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+        height: calc(100vh - 72px);
+        padding: 1rem;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
 
-        <form id="venta-form" method="POST" class="h-100">
-            {% csrf_token %}
-            <input type="hidden" name="vendedor" value="{{ vendedor.id }}">
-            
-            <div class="product-grid">
-                {% for producto in productos %}
-                <div class="product-card position-relative">
-                    <span class="stock-badge badge {% if producto.stock <= producto.stock_minimo %}bg-danger{% else %}bg-success{% endif %}">
-                        Stock: {{ producto.stock }}
-                    </span>
-                    
-                    <h5 class="product-title mb-2">{{ producto.nombre }}</h5>
-                    {% if producto.descripcion %}
-                        <p class="small text-muted mb-2">{{ producto.descripcion|truncatechars:50 }}</p>
-                    {% endif %}
-                    {% if producto.categoria %}
-                        <div class="badge bg-secondary mb-2">{{ producto.categoria }}</div>
-                    {% endif %}
-                    
-                    <div class="price mb-3">${{ producto.precio_venta }}</div>
-                    
-                    <div class="qty-control">
-                        <div class="input-group">
-                            <button type="button" class="btn btn-outline-secondary" 
-                                    onclick="adjustQty('cantidad_{{ producto.id }}', -1)">
-                                <i class="bi bi-dash"></i>
-                            </button>
-                            <input type="number" class="form-control text-center product-qty"
-                                   name="cantidad_{{ producto.id }}" 
-                                   id="cantidad_{{ producto.id }}"
-                                   value="0" min="0" max="{{ producto.stock }}"
-                                   onchange="validateQty(this, {{ producto.stock }})"
-                                   oninput="updateCart()"
-                                   data-price="{{ producto.precio_venta }}"
-                                   data-name="{{ producto.nombre }}">
-                            <button type="button" class="btn btn-outline-secondary" 
-                                    onclick="adjustQty('cantidad_{{ producto.id }}', 1)">
-                                <i class="bi bi-plus"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                {% empty %}
-                <div class="text-center py-5 w-100">
-                    <i class="bi bi-inbox display-1 text-muted"></i>
-                    <p class="lead mt-3">No se encontraron productos</p>
-                </div>
-                {% endfor %}
-            </div>
-        </form>
-    </div>
+    /* Layout */
+    .pos-products {
+        background: #ffffff;
+        border-radius: 8px;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 6px 14px rgba(31,41,55,0.04);
+    }
 
-    <!-- Panel del Carrito -->
-    <div class="pos-cart">
-        <div class="p-3 border-bottom">
-            <h4 class="mb-0">Carrito de Compras</h4>
-        </div>
+    /* Search */
+    .search-bar {
+        background: #f3f4f6;
+        border: 1px solid #e6e8eb;
+        color: #111827;
+        height: 52px;
+        padding-left: 0.9rem;
+        font-size: 0.98rem;
+        border-radius: 8px 0 0 8px;
+    }
 
-        <div class="pos-cart-items p-3" id="cart-items">
-            <!-- Los items del carrito se agregarán aquí dinámicamente -->
-        </div>
+    .input-group .btn {
+        border-radius: 0 8px 8px 0;
+        height: 52px;
+        background: #e9eef6;
+        border: 1px solid #e6e8eb;
+        color: #0f1724;
+    }
 
-        <div class="pos-cart-total">
-            <div class="d-flex justify-content-between mb-2">
-                <span>Subtotal:</span>
-                <span id="subtotal-amount">$0.00</span>
-            </div>
-            <div class="d-flex justify-content-between mb-3">
-                <span class="h5">Total:</span>
-                <span class="h5" id="total-amount">$0.00</span>
-            </div>
-            
-            <button type="submit" form="venta-form" class="btn btn-primary btn-lg w-100" id="confirm-btn" disabled>
-                <i class="bi bi-check2-circle me-2"></i>
-                Finalizar Venta
-            </button>
-        </div>
-    </div>
-</div>
+    .search-bar:focus {
+        background: #fff;
+        border-color: #cbd5e1;
+        box-shadow: none;
+        outline: none;
+    }
+
+    /* Product cards */
+    .product-grid { transition: opacity 160ms ease-in-out; }
+
+    .product-card {
+        background: #ffffff;
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+        position: relative;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+        border: 1px solid #eef2f6;
+    }
+
+    .product-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 18px rgba(31,41,55,0.04);
+        border-color: #e2e8f0;
+    }
+
+    .product-card.out-of-stock { opacity: 0.6; cursor: not-allowed; }
+
+    .product-image { width:72px; height:72px; margin:0 auto 0.6rem; background:#f7fafc; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#374151; font-size:22px; }
+
+    .stock-badge { position:absolute; top:0.6rem; right:0.6rem; font-size:0.75rem; padding:0.2rem 0.5rem; border-radius:999px; background:#f1f5f9; color:#374151; }
+
+    .product-title { font-size:0.95rem; color:#111827; margin:0; }
+    .price { font-size:1.05rem; font-weight:700; color:#0b5ed7; margin-top:0.45rem; }
+
+    /* Cart preview */
+    .cart-preview { background:#ffffff; border-radius:8px; padding:0.6rem; box-shadow:0 8px 20px rgba(31,41,55,0.04); margin-bottom:1rem; }
+    .cart-header h5 { margin:0; font-weight:600; color:#0f1724; }
+    .cart-items { max-height:220px; overflow-y:auto; padding:0.5rem 0; }
+
+    .cart-item-row { display:flex; gap:0.75rem; align-items:center; padding:0.55rem 0; border-bottom:1px solid #f1f5f9; }
+    .cart-item-row:last-child{ border-bottom:none; }
+    .cart-item-thumb{ width:44px;height:44px;border-radius:6px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;color:#374151 }
+    .cart-item-title{ margin:0;font-size:0.95rem;color:#111827 }
+    .cart-item-qty{ min-width:56px; text-align:center; color:#111827 }
+
+    .cart-controls{ padding-top:0.6rem; }
+    .cart-total{ font-size:1.25rem; font-weight:700; color:#0b5ed7 }
+
+    /* Buttons / numpad */
+    .numpad{ display:grid; grid-template-columns: repeat(3,1fr); gap:0.5rem; margin-top:0.8rem }
+    .numpad-btn{ background:#f7fafc; border:1px solid #eef2f6; color:#0f1724; padding:0.9rem; font-size:1.05rem; border-radius:8px }
+    .numpad-btn.enter{ grid-column:span 2; background:#2b6ea3; color:#fff; font-weight:600 }
+
+    /* Scrollbars subtle */
+    ::-webkit-scrollbar{ width:10px; height:10px }
+    ::-webkit-scrollbar-thumb{ background: rgba(31,41,55,0.06); border-radius:8px }
+    ::-webkit-scrollbar-track{ background: transparent }
+</style>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// Configuración del formateador de moneda
 const formatter = new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS'
 });
 
-function adjustQty(inputId, delta) {
-    const input = document.getElementById(inputId);
-    const newValue = parseInt(input.value || 0) + delta;
-    input.value = Math.max(0, Math.min(newValue, parseInt(input.max)));
-    updateCart();
+// Estado del carrito
+let cart = {};
+let selectedProduct = null;
+
+// Función para agregar un producto al carrito
+function addToCart(id, nombre, precio, stock) {
+    if (stock <= 0) {
+        showToast('error', 'No hay stock disponible para este producto');
+        return;
+    }
+
+    if (!cart[id]) {
+        cart[id] = {
+            id: id,
+            nombre: nombre,
+            precio: precio,
+            cantidad: 0
+        };
+    }
+
+    if (cart[id].cantidad < stock) {
+        cart[id].cantidad++;
+        updateCartDisplay();
+        // No mostrar notificación para cada agregado (flujo rápido en POS)
+    } else {
+        showToast('error', 'No hay más stock disponible');
+    }
 }
 
-function validateQty(input, max) {
-    input.value = Math.max(0, Math.min(parseInt(input.value || 0), max));
+// Función para actualizar la cantidad de un producto
+function updateQuantity(id, newQty, stock) {
+    if (newQty > stock) {
+        showToast('error', 'No hay suficiente stock disponible');
+        return;
+    }
+
+    if (newQty <= 0) {
+        delete cart[id];
+    } else {
+        cart[id].cantidad = newQty;
+    }
+    updateCartDisplay();
 }
 
-function updateCart() {
-    const cartItems = document.getElementById('cart-items');
-    cartItems.innerHTML = '';
-    
-    let total = 0;
-    let hasItems = false;
+// Función para actualizar la visualización del carrito
+function updateCartDisplay() {
+    const cartContainer = document.getElementById('cart-items');
+    cartContainer.innerHTML = '';
 
-    document.querySelectorAll('.product-qty').forEach(input => {
-        const qty = parseInt(input.value || 0);
-        if (qty > 0) {
-            hasItems = true;
-            const price = parseFloat(input.dataset.price);
-            const subtotal = qty * price;
-            total += subtotal;
+    let subtotal = 0;
 
-            const itemElement = document.createElement('div');
-            itemElement.className = 'mb-3 border-bottom pb-2';
-            itemElement.innerHTML = `
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <h6 class="mb-1">${input.dataset.name}</h6>
-                        <div class="text-muted small">
-                            ${qty} x ${formatter.format(price)}
-                        </div>
-                    </div>
-                    <div class="h6 mb-0">
-                        ${formatter.format(subtotal)}
-                    </div>
+    Object.values(cart).forEach(item => {
+        const itemTotal = item.precio * item.cantidad;
+        subtotal += itemTotal;
+
+        const itemElement = document.createElement('div');
+        itemElement.className = 'cart-item';
+        itemElement.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="cart-item-title">${item.nombre}</div>
+                    <div class="cart-item-price">$${item.precio}</div>
                 </div>
-            `;
-            cartItems.appendChild(itemElement);
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-danger" onclick="updateQuantity('${item.id}', ${item.cantidad - 1})">
+                        <i class="bi bi-dash"></i>
+                    </button>
+                    <span class="mx-2">${item.cantidad}</span>
+                    <button class="btn btn-sm btn-outline-primary" onclick="updateQuantity('${item.id}', ${item.cantidad + 1})">
+                        <i class="bi bi-plus"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="text-end mt-2">
+                <strong>Total: $${itemTotal.toFixed(2)}</strong>
+            </div>
+        `;
+        cartContainer.appendChild(itemElement);
+    });
+
+    document.getElementById('subtotal-amount').textContent = `$${subtotal.toFixed(2)}`;
+    document.getElementById('total-amount').textContent = `$${subtotal.toFixed(2)}`;
+
+    // Habilitar/deshabilitar botón de finalizar venta
+    const finalizarBtn = document.querySelector('.numpad-btn.enter');
+    const isEmpty = Object.keys(cart).length === 0;
+    // Guardar por si no existe el botón físico del numpad en la plantilla
+    if (finalizarBtn) finalizarBtn.disabled = isEmpty;
+    const confirmBtn = document.getElementById('confirm-btn');
+    if (confirmBtn) confirmBtn.disabled = isEmpty;
+}
+
+// Función para limpiar el carrito
+function clearCart() {
+    if (Object.keys(cart).length === 0) return;
+    
+    if (confirm('¿Estás seguro de que deseas limpiar el carrito?')) {
+        cart = {};
+        updateCartDisplay();
+        showToast('info', 'El carrito ha sido limpiado');
+    }
+}
+
+// Función para mostrar notificaciones
+function showToast(type, message) {
+    const toast = document.getElementById('liveToast');
+    const toastBody = toast.querySelector('.toast-body');
+    
+    toastBody.textContent = message;
+    toast.className = `toast bg-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} text-white`;
+    
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+}
+
+// Función para manejar el teclado numérico
+function numpadInput(digit) {
+    if (!selectedProduct) return;
+    
+    const currentQty = parseInt(selectedProduct.value) || 0;
+    const newQty = parseInt(`${currentQty}${digit}`);
+    
+    selectedProduct.value = newQty;
+    updateQuantity(selectedProduct.dataset.productId, newQty);
+}
+
+// Función para finalizar la venta
+function finalizarVenta() {
+    if (Object.keys(cart).length === 0) {
+        showToast('error', 'El carrito está vacío');
+        return;
+    }
+
+    // Activar el botón de confirmación (submit real del form)
+    const confirmBtn = document.getElementById('confirm-btn');
+    if (confirmBtn && !confirmBtn.disabled) {
+        // Trigger the same flow as clicking the confirm button
+        prepareAndSubmit();
+    } else {
+        showToast('error', 'No es posible finalizar la venta en este momento');
+    }
+}
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Atajos de teclado
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'F3') {
+            e.preventDefault();
+            document.querySelector('input[name="busqueda"]').focus();
+        } else if (e.key === 'F10') {
+            e.preventDefault();
+            finalizarVenta();
+        } else if (e.key === 'F12') {
+            e.preventDefault();
+            clearCart();
+        } else if (e.key === 'Escape') {
+            if (selectedProduct) {
+                selectedProduct.blur();
+                selectedProduct = null;
+            }
         }
     });
 
-    if (!hasItems) {
-        cartItems.innerHTML = `
-            <div class="text-center text-muted py-5">
-                <i class="bi bi-cart3 display-4"></i>
-                <p class="mt-2">El carrito está vacío</p>
-            </div>
-        `;
+    // Focus en la búsqueda al cargar
+    document.querySelector('input[name="busqueda"]').focus();
+});
+
+// Live search: fetch products as user types (debounced)
+(function(){
+    const searchInput = document.querySelector('input[name="busqueda"]');
+    const productGrid = document.querySelector('.product-grid');
+    const endpoint = '{% url "ventas:search_products" %}';
+
+    function debounce(fn, wait){
+        let t;
+        return function(...args){
+            clearTimeout(t);
+            t = setTimeout(()=> fn.apply(this, args), wait);
+        };
     }
 
-    document.getElementById('subtotal-amount').textContent = formatter.format(total);
-    document.getElementById('total-amount').textContent = formatter.format(total);
-    document.getElementById('confirm-btn').disabled = !hasItems;
-}
+    function buildProductCard(p){
+        const card = document.createElement('div');
+        card.className = 'product-card' + (p.stock <= 0 ? ' out-of-stock' : '');
+        card.dataset.productId = p.id;
+        card.dataset.productNombre = p.nombre;
+        card.dataset.productPrecio = p.precio_venta;
+        card.dataset.productStock = p.stock;
 
-// Inicializar el carrito al cargar la página
-document.addEventListener('DOMContentLoaded', updateCart);
+        const stockBadge = document.createElement('span');
+        stockBadge.className = 'stock-badge badge ' + (p.stock <= p.stock_minimo ? 'bg-danger' : 'bg-success');
+        stockBadge.textContent = `${p.stock} unid.`;
+
+        const img = document.createElement('div');
+        img.className = 'product-image';
+        img.innerHTML = '<i class="bi bi-box-seam fs-2"></i>';
+
+        const title = document.createElement('h6');
+        title.className = 'product-title mb-1';
+        title.textContent = p.nombre;
+
+        const price = document.createElement('div');
+        price.className = 'price mb-0';
+        price.textContent = `$${parseFloat(p.precio_venta).toFixed(2)}`;
+
+        card.appendChild(stockBadge);
+        card.appendChild(img);
+        card.appendChild(title);
+        if (p.categoria) {
+            const cat = document.createElement('div');
+            cat.className = 'badge bg-secondary mb-2';
+            cat.textContent = p.categoria;
+            card.appendChild(cat);
+        }
+        card.appendChild(price);
+
+        return card;
+    }
+
+    async function doSearch(q){
+        if (!productGrid) return;
+        if (!q) {
+            // show placeholder
+            productGrid.innerHTML = '<div class="text-center py-5 w-100">\n                <i class="bi bi-search display-1 opacity-25"></i>\n                <p class="lead mt-3">Ingrese un término de búsqueda para ver productos</p>\n            </div>';
+            return;
+        }
+
+        try{
+            const res = await fetch(endpoint + '?q=' + encodeURIComponent(q));
+            if (!res.ok) throw new Error('network');
+            const data = await res.json();
+            const results = data.results || [];
+            productGrid.innerHTML = '';
+            if (results.length === 0){
+                productGrid.innerHTML = '<div class="text-center py-5 w-100">\n                    <i class="bi bi-inbox display-1 opacity-25"></i>\n                    <p class="lead mt-3">No se encontraron productos</p>\n                </div>';
+                return;
+            }
+
+            results.forEach(p => {
+                const el = buildProductCard(p);
+                productGrid.appendChild(el);
+            });
+
+        } catch(err){
+            console.error('Search error', err);
+        }
+    }
+
+    const debounced = debounce(doSearch, 300);
+    if (searchInput){
+        searchInput.addEventListener('input', function(e){
+            debounced(this.value.trim());
+        });
+    }
+
+    // Event delegation for clicks on product cards (works for server and AJAX rendered)
+    if (productGrid){
+        productGrid.addEventListener('click', function(e){
+            const card = e.target.closest('.product-card');
+            if (!card) return;
+            const id = card.dataset.productId;
+            const nombre = card.dataset.productNombre;
+            const precio = parseFloat(card.dataset.productPrecio);
+            const stock = parseInt(card.dataset.productStock, 10);
+            if (!id) return;
+            addToCart(id, nombre, precio, stock);
+        });
+    }
+})();
+
+// Preparar datos del carrito dentro del form y enviar
+function prepareAndSubmit() {
+    const form = document.getElementById('venta-form');
+    // Eliminar inputs previos de cantidad si existen
+    Array.from(form.querySelectorAll('input[name^="cantidad_"]')).forEach(n => n.remove());
+
+    // Agregar inputs escondidos con las cantidades actuales
+    Object.values(cart).forEach(item => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = `cantidad_${item.id}`;
+        input.value = item.cantidad;
+        form.appendChild(input);
+    });
+
+    // Si no hay items, prevenir submit
+    if (Object.keys(cart).length === 0) {
+        showToast('error', 'El carrito está vacío');
+        return;
+    }
+
+    // Enviar el formulario
+    form.submit();
+}
+</script>
+
+<!-- html5-qrcode and scanner integration -->
+<script src="{% static 'vendor/html5-qrcode.min.js' %}"></script>
+<script>
+// Scanner integration: start/stop tied to Bootstrap modal events
+(function(){
+    let html5Qr = null;
+    let isProcessing = false; // Flag para evitar procesamiento múltiple
+    let lastScannedCode = null;
+    let lastScannedTime = 0;
+
+    // Función para reproducir sonido de beep
+    function playBeep() {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 800; // Frecuencia del beep
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.15);
+    }
+
+    async function onScanSuccess(decoded){
+        console.log('Scanner decoded:', decoded);
+        
+        // Evitar procesamiento duplicado del mismo código en menos de 2 segundos
+        const now = Date.now();
+        if (isProcessing || (decoded === lastScannedCode && (now - lastScannedTime) < 2000)) {
+            console.log('Ignorando escaneo duplicado');
+            return;
+        }
+        
+        isProcessing = true;
+        lastScannedCode = decoded;
+        lastScannedTime = now;
+        
+        // Buscar el producto por código con reintentos
+        const endpoint = '{% url "ventas:search_products" %}';
+        const maxRetries = 3;
+        let attempts = 0;
+        let producto = null;
+        
+        while (attempts < maxRetries && !producto) {
+            attempts++;
+            try {
+                console.log(`Intento ${attempts} de ${maxRetries} para buscar producto: ${decoded}`);
+                const res = await fetch(endpoint + '?q=' + encodeURIComponent(decoded));
+                if (!res.ok) throw new Error('network');
+                const data = await res.json();
+                const results = data.results || [];
+                
+                if (results.length > 0) {
+                    producto = results[0];
+                    break;
+                }
+                
+                // Si no encontró resultados y aún hay intentos, esperar un poco
+                if (attempts < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+                
+            } catch(err) {
+                console.error(`Error en intento ${attempts}:`, err);
+                if (attempts < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+            }
+        }
+        
+        if (!producto) {
+            // Poner el código en el buscador para que el usuario busque manualmente
+            const input = document.querySelector('input[name="busqueda"]');
+            if (input) input.value = decoded;
+            isProcessing = false; // Liberar el flag
+            return;
+        }
+        
+        // Cerrar el modal del scanner
+        try{ 
+            const m = bootstrap.Modal.getInstance(document.getElementById('scannerModal')); 
+            if (m) m.hide(); 
+        }catch(e){ console.warn(e); }
+        
+        // Agregar al carrito
+        addToCart(producto.id, producto.nombre, parseFloat(producto.precio_venta), producto.stock);
+        
+        // Reproducir beep
+        playBeep();
+        
+        // Mostrar notificación
+        showToast('success', `${producto.nombre} agregado al carrito`);
+        
+        // Liberar el flag después de un breve delay
+        setTimeout(() => { isProcessing = false; }, 500);
+    }
+
+    function onScanFailure(err){
+        // optionally log scan failures (continuous stream may produce many)
+        // console.debug('scan failure', err);
+    }
+
+    function startScanner(){
+        if (typeof Html5Qrcode === 'undefined'){
+            console.error('html5-qrcode not loaded');
+            return;
+        }
+        if (html5Qr){ try{ html5Qr.stop(); html5Qr.clear(); }catch(e){} html5Qr=null; }
+
+        const containerId = 'scanner-container';
+        const statusEl = document.getElementById('scanner-status');
+        if (statusEl){ statusEl.style.display = 'block'; statusEl.textContent = 'Iniciando cámara...'; }
+
+        Html5Qrcode.getCameras().then((cameras)=>{
+            console.log('startScanner: cameras', cameras);
+            if (!cameras || cameras.length === 0){
+                console.warn('No cameras found via getCameras(), using facingMode fallback');
+                // try html5-qrcode facingMode first, then native fallback
+                html5Qr = new Html5Qrcode(containerId);
+                return html5Qr.start({ facingMode: 'environment' }, { fps:15, qrbox:{ width:280, height:180 } }, onScanSuccess, onScanFailure)
+                  .catch(err=>{
+                      console.error('html5-qrcode facingMode start failed', err);
+                      if (statusEl) statusEl.textContent = 'No se pudo iniciar html5-qrcode, probando método nativo...';
+                      return tryNativeStream(containerId, statusEl);
+                  });
+            }
+
+            // prefer rear/back camera when possible
+            let chosen = cameras[0];
+            const preferred = cameras.find(c => /back|rear|environment/i.test(c.label || ''));
+            if (preferred) chosen = preferred;
+            const cameraId = chosen.id || chosen.deviceId || null;
+            console.log('startScanner: chosen camera', cameraId, chosen);
+
+            html5Qr = new Html5Qrcode(containerId);
+            const cameraArg = cameraId ? cameraId : { facingMode: 'environment' };
+            return html5Qr.start(cameraArg, { fps:15, qrbox:{ width:280, height:180 } }, onScanSuccess, onScanFailure)
+              .catch(err=>{
+                  console.error('html5-qrcode start with cameraArg failed', err);
+                  if (statusEl) statusEl.textContent = 'Error al iniciar html5-qrcode, intentando fallback nativo...';
+                  return tryNativeStream(containerId, statusEl);
+              });
+        }).catch((err)=>{
+            console.warn('startScanner: getCameras error, trying facingMode fallback', err);
+            console.error('getCameras error detail:', err);
+            // show error details and enumerate devices to help diagnose
+            showErrorAndDevices(err, statusEl);
+            try{
+                html5Qr = new Html5Qrcode(containerId);
+                html5Qr.start({ facingMode: 'environment' }, { fps:15, qrbox:{ width:280, height:180 } }, onScanSuccess, onScanFailure)
+                .catch(e=>{
+                    console.error('Scanner start fallback failed', e);
+                    showErrorAndDevices(e, statusEl);
+                    if (statusEl) statusEl.textContent = 'No se pudo iniciar html5-qrcode, probando método nativo...';
+                    return tryNativeStream(containerId, statusEl);
+                });
+            }catch(e){ console.error('startScanner fatal error', e); showErrorAndDevices(e, statusEl); }
+        });
+    }
+
+    // Native getUserMedia fallback: attach a plain video stream to the container
+    function tryNativeStream(containerId, statusEl){
+        const container = document.getElementById(containerId);
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+            console.error('getUserMedia not supported');
+            if (statusEl) statusEl.textContent = 'Su navegador no soporta getUserMedia.';
+            return Promise.reject(new Error('getUserMedia not supported'));
+        }
+
+        // stop any previous html5Qr
+        if (html5Qr){ try{ html5Qr.stop(); html5Qr.clear(); }catch(e){} html5Qr = null; }
+
+        // clear container and add video element
+        if (container){ container.innerHTML = ''; }
+        const video = document.createElement('video');
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;
+        if (container) container.appendChild(video);
+
+        const constraints = { video: { facingMode: 'environment' } };
+        if (statusEl) statusEl.textContent = 'Solicitando permiso de cámara...';
+
+        return navigator.mediaDevices.getUserMedia(constraints).then((stream)=>{
+            try{ video.srcObject = stream; }catch(e){ video.src = URL.createObjectURL(stream); }
+            if (statusEl) { statusEl.textContent = 'Transmisión nativa activa (modo debug).'; setTimeout(()=>{ statusEl.style.display='none'; }, 3000); }
+            console.log('Native stream started', stream);
+            return Promise.resolve(stream);
+        }).catch((err)=>{
+            console.error('Native getUserMedia failed', err);
+            if (statusEl){
+                if (err.name === 'NotAllowedError' || err.name === 'SecurityError') statusEl.textContent = 'Permiso de cámara denegado.';
+                else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') statusEl.textContent = 'Cámara no encontrada o no disponible.';
+                else statusEl.textContent = 'Error al acceder a la cámara: ' + (err.message || err.name);
+                statusEl.style.display = 'block';
+                // enumerate devices to provide additional clues
+                enumerateDevicesToElement();
+            }
+            return Promise.reject(err);
+        });
+    }
+
+    function enumerateDevicesToElement(){
+        const el = document.getElementById('scanner-devices');
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        navigator.mediaDevices.enumerateDevices().then(devices=>{
+            const videoDevices = devices.filter(d=>d.kind === 'videoinput');
+            const lines = [];
+            lines.push('Dispositivos de entrada de video encontrados: ' + videoDevices.length);
+            videoDevices.forEach((d, i)=>{
+                lines.push(`${i+1}. label: "${d.label}" id: "${d.deviceId}"`);
+            });
+            if (el){ el.style.display = 'block'; el.textContent = lines.join('\n'); }
+            console.log('enumerateDevices result:', devices);
+        }).catch(e=>{ console.warn('enumerateDevices failed', e); });
+    }
+
+    function showErrorAndDevices(err, statusEl){
+        console.error('Scanner error:', err);
+        if (statusEl){ statusEl.style.display='block'; statusEl.textContent = 'Error: ' + ((err && (err.message || err.name)) || String(err)); }
+        enumerateDevicesToElement();
+    }
+
+    function stopScanner(){
+        if (!html5Qr) return;
+        html5Qr.stop().then(()=>{
+            try{ html5Qr.clear(); }catch(e){}
+            html5Qr = null;
+        }).catch((err)=>{ console.warn('stopScanner error', err); html5Qr = null; });
+    }
+
+    document.addEventListener('DOMContentLoaded', function(){
+        const scannerModalEl = document.getElementById('scannerModal');
+        if (scannerModalEl){
+            scannerModalEl.addEventListener('shown.bs.modal', startScanner);
+            scannerModalEl.addEventListener('hidden.bs.modal', stopScanner);
+        }
+    });
+})();
 </script>
 {% endblock %}
+
+{% block content %}
+<div class="pos-container">
+    <!-- Panel de Productos -->
+    <div class="pos-products">
+        <!-- Barra de búsqueda -->
+        <div class="d-flex gap-2 mb-3">
+            <form class="flex-grow-1" method="GET" action="">
+                <div class="input-group">
+                    <span class="input-group-text bg-dark border-0">
+                        <i class="bi bi-upc-scan"></i>
+                    </span>
+                    <input name="busqueda" class="form-control form-control-lg search-bar" type="search" 
+                           placeholder="Buscar por código de barras o nombre del producto..." 
+                           value="{{ request.GET.busqueda|default:'' }}"
+                           autocomplete="off"
+                           autofocus>
+                    <button class="btn btn-primary" type="submit">
+                        <i class="bi bi-search"></i>
+                        <span class="shortcut-key">F3</span>
+                    </button>
+                    <!-- Scanner button next to search (standardized) -->
+                    <button class="btn btn-outline-secondary btn-sm ms-1" id="scannerButton" type="button" title="Escanear" data-bs-toggle="modal" data-bs-target="#scannerModal" aria-label="Escanear">
+                        <i class="bi bi-upc-scan"></i>
+                    </button>
+                </div>
+            </form>
+            <button class="btn btn-outline-light" type="button" data-bs-toggle="modal" data-bs-target="#shortcutsModal">
+                <i class="bi bi-keyboard"></i>
+            </button>
+        </div>
+
+        <!-- Categorías de productos -->
+        <div class="mb-3 d-flex gap-2">
+            <button class="btn btn-sm btn-dark active">Todos</button>
+            {% for categoria in categorias %}
+                <button class="btn btn-sm btn-dark">{{ categoria.nombre }}</button>
+            {% endfor %}
+        </div>
+
+        <!-- Carrito (ubicado debajo de la búsqueda) -->
+        <div class="cart-preview mb-3">
+            <div class="cart-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-cart3 me-2"></i>
+                        Carrito
+                    </h5>
+                    <button class="btn btn-outline-danger btn-sm" onclick="clearCart()">
+                        <i class="bi bi-trash"></i>
+                        Limpiar
+                        <span class="shortcut-key">F12</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="cart-items" id="cart-items">
+                <!-- Items del carrito (dinámico) -->
+            </div>
+
+            <div class="cart-controls">
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Subtotal:</span>
+                    <span id="subtotal-amount">$0.00</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span class="h6">Total:</span>
+                    <span class="cart-total" id="total-amount">$0.00</span>
+                </div>
+                <!-- Botón de finalizar (invoca prepareAndSubmit) -->
+                <div class="mb-3">
+                    <button id="confirm-btn" type="button" class="btn btn-primary btn-lg w-100" disabled onclick="prepareAndSubmit()">
+                        <i class="bi bi-check2-circle me-2"></i>
+                        Finalizar Venta
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grid de productos -->
+        <form id="venta-form" method="POST" class="h-100">
+            {% csrf_token %}
+            <input type="hidden" name="vendedor" value="{{ vendedor.id }}">
+
+            {% if request.GET.busqueda %}
+            <div class="product-grid">
+                {% for producto in productos %}
+                <div class="product-card {% if producto.stock <= 0 %}out-of-stock{% endif %}" 
+                     data-product-id="{{ producto.id }}"
+                     data-product-nombre="{{ producto.nombre }}"
+                     data-product-precio="{{ producto.precio_venta }}"
+                     data-product-stock="{{ producto.stock }}">
+                    <span class="stock-badge badge {% if producto.stock <= producto.stock_minimo %}bg-danger{% else %}bg-success{% endif %}">
+                        {{ producto.stock }} unid.
+                    </span>
+                    
+                    <div class="product-image">
+                        <i class="bi bi-box-seam fs-2"></i>
+                    </div>
+                    
+                    <h6 class="product-title mb-1">{{ producto.nombre }}</h6>
+                    {% if producto.categoria %}
+                        <div class="badge bg-secondary mb-2">{{ producto.categoria }}</div>
+                    {% endif %}
+                    
+                    <div class="price mb-0">${{ producto.precio_venta }}</div>
+                </div>
+                {% empty %}
+                <div class="text-center py-5 w-100">
+                    <i class="bi bi-inbox display-1 opacity-25"></i>
+                    <p class="lead mt-3">No se encontraron productos</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="product-grid empty-placeholder">
+                <div class="text-center py-5 w-100">
+                    <i class="bi bi-search display-1 opacity-25"></i>
+                    <p class="lead mt-3">Ingrese un término de búsqueda para ver productos</p>
+                </div>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    </div>
+                <!-- Scanner Modal (moved from global template) -->
+                <div class="modal fade" id="scannerModal" tabindex="-1" aria-labelledby="scannerModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h6 class="modal-title" id="scannerModalLabel">Escanear código</h6>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+                            <div class="modal-body text-center">
+                                <div id="scanner-container" style="width:100%;height:320px;background:#000;position:relative;overflow:hidden;"></div>
+                                <p id="scanner-help" class="small text-muted mt-2">Aproxime el código al área de la cámara.</p>
+                                <p id="scanner-status" class="small text-warning mt-1" style="display:none"></p>
+                                <pre id="scanner-devices" class="small text-muted mt-2" style="display:none;white-space:pre-wrap;font-size:0.85rem;max-height:140px;overflow:auto;background:#f8f9fa;padding:6px;border-radius:4px;border:1px solid #eee"></pre>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+<!-- Modal de atajos de teclado -->
+<div class="modal fade" id="shortcutsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title">Atajos de Teclado</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="d-flex justify-content-between">
+                            <span>Búsqueda</span>
+                            <span class="shortcut-key">F3</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="d-flex justify-content-between">
+                            <span>Limpiar carrito</span>
+                            <span class="shortcut-key">F12</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="d-flex justify-content-between">
+                            <span>Finalizar venta</span>
+                            <span class="shortcut-key">F10</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="d-flex justify-content-between">
+                            <span>Cancelar</span>
+                            <span class="shortcut-key">ESC</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast para notificaciones -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong class="me-auto">Notificación</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body"></div>
+    </div>
+</div>
+{% endblock content %}

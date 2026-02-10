@@ -9,6 +9,7 @@ class Categoria(models.Model):
 
 class Producto(models.Model):
     nombre = models.CharField(max_length=200)
+    codigo = models.IntegerField()
     descripcion = models.TextField(blank=True)
     precio_venta = models.DecimalField(max_digits=10, decimal_places=2)
     stock = models.PositiveIntegerField(default=0)

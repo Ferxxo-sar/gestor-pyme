@@ -1,0 +1,199 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Editar Proveedor{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title mb-0">
+                        <i class="bi bi-pencil me-2"></i>
+                        Editar Proveedor
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="proveedorForm" data-selected-pais="{% if proveedor.direccion and proveedor.direccion.pais %}{{ proveedor.direccion.pais.id }}{% endif %}" data-selected-estado="{% if proveedor.direccion and proveedor.direccion.estado %}{{ proveedor.direccion.estado.id }}{% endif %}" data-selected-ciudad="{% if proveedor.direccion and proveedor.direccion.ciudad %}{{ proveedor.direccion.ciudad.id }}{% endif %}">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="nombre" class="form-label">Nombre *</label>
+                            <input type="text" class="form-control" id="nombre" name="nombre" value="{{ proveedor.nombre }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" value="{{ proveedor.email }}">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="telefono" class="form-label">Teléfono</label>
+                            <input type="tel" class="form-control" id="telefono" name="telefono" value="{{ proveedor.telefono }}">
+                        </div>
+
+                        <!-- Campos de Dirección -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h5 class="card-title mb-0">Dirección</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-8 mb-3">
+                                        <label for="calle" class="form-label">Calle *</label>
+                                        <input type="text" class="form-control" id="calle" name="calle" value="{{ proveedor.direccion.calle }}">
+                                    </div>
+                                    <div class="col-md-4 mb-3">
+                                        <label for="numero" class="form-label">Número *</label>
+                                        <input type="text" class="form-control" id="numero" name="numero" value="{{ proveedor.direccion.numero }}">
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="ciudad" class="form-label">Ciudad *</label>
+                                        <select class="form-select" id="ciudad" name="ciudad">
+                                            <option value="">-- Seleccionar --</option>
+                                            {% for ciudad in ciudades %}
+                                                <option value="{{ ciudad.id }}" {% if ciudad.estado %}data-estado="{{ ciudad.estado.id }}"{% endif %} {% if proveedor.direccion and proveedor.direccion.ciudad and proveedor.direccion.ciudad.id == ciudad.id %}selected{% endif %}>{{ ciudad.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="estado" class="form-label">Estado/Provincia</label>
+                                        <select class="form-select" id="estado" name="estado">
+                                            <option value="">-- Seleccionar --</option>
+                                            {% for estado in estados %}
+                                                <option value="{{ estado.id }}" {% if estado.pais %}data-pais="{{ estado.pais.id }}"{% endif %} {% if proveedor.direccion and proveedor.direccion.estado and proveedor.direccion.estado.id == estado.id %}selected{% endif %}>{{ estado.nombre }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="codigo_postal" class="form-label">Código Postal</label>
+                                        <select class="form-select" id="codigo_postal" name="codigo_postal">
+                                            <option value="">-- Seleccionar --</option>
+                                            {% for cp in codigos_postales %}
+                                                <option value="{{ cp.id }}" {% if proveedor.direccion and proveedor.direccion.codigo_postal and proveedor.direccion.codigo_postal.id == cp.id %}selected{% endif %}>
+                                                    {{ cp.codigo }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+
+                                    <div class="col-md-6 mb-3">
+                                        <label for="pais" class="form-label">País</label>
+                                        <select class="form-select" id="pais" name="pais">
+                                            <option value="">-- Seleccionar --</option>
+                                            {% for pais in paises %}
+                                                <option value="{{ pais.id }}" {% if proveedor.direccion and proveedor.direccion.pais and proveedor.direccion.pais.id == pais.id %}selected{% endif %}>
+                                                    {{ pais.nombre }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <script>
+                            (function(){
+                                const paisSelect = document.getElementById('pais');
+                                const estadoSelect = document.getElementById('estado');
+                                const ciudadSelect = document.getElementById('ciudad');
+
+                                function clearSelect(sel){
+                                    sel.innerHTML = '<option value="">-- Seleccionar --</option>';
+                                }
+
+                                function populateSelect(sel, items, selectedId){
+                                    clearSelect(sel);
+                                    items.forEach(it => {
+                                        const opt = document.createElement('option');
+                                        opt.value = it.id;
+                                        opt.textContent = it.nombre || it.codigo || it.nombre;
+                                        if(String(it.id) === String(selectedId)) opt.selected = true;
+                                        sel.appendChild(opt);
+                                    });
+                                }
+
+                                async function loadEstados(paisId, selectedEstado){
+                                    clearSelect(estadoSelect);
+                                    clearSelect(ciudadSelect);
+                                    if(!paisId) return;
+                                    const res = await fetch(`/proveedores/ajax/estados/${paisId}/`);
+                                    if(!res.ok) return;
+                                    const data = await res.json();
+                                    populateSelect(estadoSelect, data.estados, selectedEstado);
+                                }
+
+                                async function loadCiudades(estadoId, selectedCiudad){
+                                    clearSelect(ciudadSelect);
+                                    if(!estadoId) return;
+                                    const res = await fetch(`/proveedores/ajax/ciudades/${estadoId}/`);
+                                    if(!res.ok) return;
+                                    const data = await res.json();
+                                    populateSelect(ciudadSelect, data.ciudades, selectedCiudad);
+                                }
+
+                                if(paisSelect){
+                                    paisSelect.addEventListener('change', function(){
+                                        const paisId = this.value;
+                                        loadEstados(paisId, null);
+                                    });
+                                }
+
+                                if(estadoSelect){
+                                    estadoSelect.addEventListener('change', function(){
+                                        const estadoId = this.value;
+                                        loadCiudades(estadoId, null);
+                                    });
+                                }
+
+                                // On load: load selected values (if any)
+                                document.addEventListener('DOMContentLoaded', function(){
+                                    const form = document.getElementById('proveedorForm');
+                                    const selectedPais = form ? form.dataset.selectedPais : '';
+                                    const selectedEstado = form ? form.dataset.selectedEstado : '';
+                                    const selectedCiudad = form ? form.dataset.selectedCiudad : '';
+                                    if(selectedPais){
+                                        paisSelect.value = selectedPais;
+                                        loadEstados(selectedPais, selectedEstado).then(() => {
+                                            if(selectedEstado){
+                                                loadCiudades(selectedEstado, selectedCiudad);
+                                            }
+                                        });
+                                    }
+                                });
+                            })();
+                        </script>
+
+                        <div class="mb-3">
+                            <label for="tipo" class="form-label">Tipo de proveedor</label>
+                            <select class="form-select" id="tipo" name="tipo">
+                                <option value="">-- Seleccionar --</option>
+                                {% for t in tipos %}
+                                    <option value="{{ t.id }}" {% if proveedor.tipo and proveedor.tipo.id == t.id %}selected{% endif %}>{{ t.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{% url 'proveedores:lista' %}" class="btn btn-secondary">
+                                <i class="bi bi-x-circle me-2"></i>
+                                Cancelar
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-circle me-2"></i>
+                                Guardar cambios
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

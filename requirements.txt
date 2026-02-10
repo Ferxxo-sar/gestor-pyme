@@ -1,0 +1,13 @@
+# Gestor PyME - Requirements
+# Python 3.9+
+
+# Framework principal
+Django==6.0.2
+
+# Base de datos
+# SQLite3 viene incluido con Python
+
+# Opcional: Para despliegue en producción
+# gunicorn==21.2.0
+# psycopg2-binary==2.9.9  # Para PostgreSQL
+# whitenoise==6.6.0  # Para servir archivos estáticos
