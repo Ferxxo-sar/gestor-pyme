@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 
 from .models import (
     Proveedor, TipoProveedor, Direccion,
@@ -8,24 +9,28 @@ from .models import (
 from django.http import JsonResponse
 
 
+@login_required
 def estados_por_pais(request, pais_id):
     """Devuelve JSON con los estados pertenecientes a un país."""
     estados = list(Estado.objects.filter(pais_id=pais_id).values('id', 'nombre'))
     return JsonResponse({'estados': estados})
 
 
+@login_required
 def ciudades_por_estado(request, estado_id):
     """Devuelve JSON con las ciudades pertenecientes a un estado."""
     ciudades = list(Ciudad.objects.filter(estado_id=estado_id).values('id', 'nombre'))
     return JsonResponse({'ciudades': ciudades})
 
 
+@login_required
 def lista_proveedores(request):
     """Muestra la lista de proveedores."""
     proveedores = Proveedor.objects.select_related('tipo', 'direccion').all().order_by('nombre')
     return render(request, 'lista_proveedores.html', {'proveedores': proveedores})
 
 
+@login_required
 def crear_proveedor(request):
     """Formulario para crear un proveedor con su dirección."""
     tipos = TipoProveedor.objects.all()
@@ -87,6 +92,7 @@ def crear_proveedor(request):
     return render(request, 'crear_proveedor.html', context)
 
 
+@login_required
 def editar_proveedor(request, pk):
     proveedor = get_object_or_404(Proveedor, pk=pk)
     tipos = TipoProveedor.objects.all()
@@ -151,6 +157,7 @@ def editar_proveedor(request, pk):
     return render(request, 'editar_proveedor.html', context)
 
 
+@login_required
 def eliminar_proveedor(request, pk):
     proveedor = get_object_or_404(Proveedor, pk=pk)
     if request.method == 'POST':

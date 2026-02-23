@@ -1,10 +1,12 @@
 from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
 from django.db.models import Sum, F
 from productos.models import Producto
 from proveedores.models import Proveedor
 from ventas.models import Venta
 from datetime import date
 
+@login_required
 def index(request):
     # Ventas del día
     ventas_hoy = Venta.objects.filter(fecha__date=date.today()).aggregate(

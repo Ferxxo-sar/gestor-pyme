@@ -4,6 +4,9 @@
 # Framework principal
 Django==6.0.2
 
+# Configuración y seguridad
+python-decouple==3.8
+
 # Base de datos
 # SQLite3 viene incluido con Python
 

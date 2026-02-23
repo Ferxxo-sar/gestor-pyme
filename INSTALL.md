@@ -95,7 +95,55 @@ pip install -r requirements.txt
 
 ---
 
-### Paso 4: Configurar la Base de Datos
+### Paso 4: Configurar Variables de Entorno
+
+El sistema usa variables de entorno para configuración sensible (SECRET_KEY, DEBUG, etc.).
+
+#### 4.1. Crear archivo .env
+
+Copia el archivo de ejemplo:
+
+**Windows:**
+```bash
+copy .env.example .env
+```
+
+**macOS/Linux:**
+```bash
+cp .env.example .env
+```
+
+#### 4.2. Generar SECRET_KEY
+
+Genera una nueva clave secreta para tu instalación:
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+#### 4.3. Editar el archivo .env
+
+Abre el archivo `.env` con tu editor de texto favorito y configura:
+
+```env
+# SEGURIDAD: Django Secret Key
+SECRET_KEY=tu-clave-secreta-generada-aqui
+
+# MODO DEBUG (True para desarrollo, False para producción)
+DEBUG=True
+
+# HOSTS PERMITIDOS
+ALLOWED_HOSTS=localhost,127.0.0.1
+```
+
+**⚠️ IMPORTANTE:** 
+- Nunca compartas tu archivo `.env` ni lo subas a Git
+- Cambia `DEBUG=False` en producción
+- Configura `ALLOWED_HOSTS` con tu dominio en producción
+
+---
+
+### Paso 5: Configurar la Base de Datos
 
 Aplica las migraciones para crear la base de datos:
 
@@ -107,7 +155,7 @@ Esto creará un archivo `db.sqlite3` con todas las tablas necesarias.
 
 ---
 
-### Paso 5: Crear Superusuario (Administrador)
+### Paso 6: Crear Superusuario (Administrador)
 
 #### Opción 1: Automática (Recomendada)
 
@@ -137,7 +185,7 @@ Se te pedirá:
 
 ---
 
-### Paso 6: Iniciar el Servidor
+### Paso 7: Iniciar el Servidor
 
 #### Opción 1: Usando Scripts de Inicio
 

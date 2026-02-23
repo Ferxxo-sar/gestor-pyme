@@ -1,12 +1,15 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from .models import Producto
 
+@login_required
 def lista_productos(request):
     productos = Producto.objects.all()
     return render(request, 'productos/lista_productos.html', {'productos': productos})
 
+@login_required
 def eliminar_producto(request, producto_id):
     producto = get_object_or_404(Producto, id=producto_id)
     
@@ -20,6 +23,7 @@ def eliminar_producto(request, producto_id):
     
     return redirect('productos:lista_productos')
 
+@login_required
 def editar_producto(request, producto_id):
     producto = get_object_or_404(Producto, id=producto_id)
     
@@ -38,6 +42,7 @@ def editar_producto(request, producto_id):
             
     return render(request, 'productos/editar_producto.html', {'producto': producto})
 
+@login_required
 def nuevo_producto(request):
     if request.method == 'POST':
         try:

@@ -1,10 +1,13 @@
 from django.shortcuts import render, redirect
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.http import JsonResponse
+from django.db import transaction
 from .models import Venta, DetalleVenta
 from productos.models import Producto
 
+@login_required
 def historial_ventas(request):
     """Vista para mostrar el historial de ventas."""
     ventas = Venta.objects.all().select_related('vendedor').prefetch_related('detalleventa_set__producto').order_by('-fecha')
@@ -15,6 +18,8 @@ def historial_ventas(request):
     return render(request, 'ventas/historial_ventas.html', context)
 
 
+@login_required
+@transaction.atomic
 def anular_venta(request, venta_id):
     """Vista para anular una venta y devolver el stock."""
     if request.method == 'POST':
@@ -38,6 +43,8 @@ def anular_venta(request, venta_id):
     
     return redirect('ventas:historial_ventas')
 
+@login_required
+@transaction.atomic
 def nueva_venta(request):
     termino_busqueda = request.GET.get('busqueda', '')
 
@@ -93,6 +100,7 @@ def nueva_venta(request):
     return render(request, 'ventas/nueva_venta.html', context)
 
 
+@login_required
 def search_products(request):
     """AJAX endpoint: return products matching q as JSON."""
     from django.db.models import Q
